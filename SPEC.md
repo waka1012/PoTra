@@ -25,12 +25,14 @@
 
 ```
 potra/
-├── main.py          # エントリーポイント（python main.py で起動）
-├── app.py           # メインアプリクラス
-├── worker.py        # バックグラウンド処理（ダウンロード・文字起こし）
-├── formatter.py     # 出力フォーマットのカスタマイズ（ユーザー編集用）
+├── main.py            # エントリーポイント（python main.py で起動）
+├── app.py             # メインアプリクラス
+├── worker.py          # バックグラウンド処理（ダウンロード・文字起こし）
+├── formatter.py       # 出力フォーマットのカスタマイズ（ユーザー編集用）
+├── vocabularies/      # 語彙ファイル置き場（.txt ファイルを配置）
+│   └── sample.txt
 ├── requirements.txt
-└── SPEC.md          # 本仕様書
+└── SPEC.md            # 本仕様書
 ```
 
 `requirements.txt`:
@@ -38,6 +40,7 @@ potra/
 mlx-whisper
 feedparser
 requests
+tiktoken
 ```
 
 ---
@@ -142,6 +145,21 @@ requests
   | `large-v3-turbo（高速）` | `mlx-community/whisper-large-v3-turbo` |
 - デフォルト: `large-v3（高精度）`
 
+### 語彙ファイル選択
+- ラベル「語彙:」
+- `ttk.Combobox`（読み取り専用、幅24文字）
+- 選択肢: 「なし」＋ `vocabularies/` 内の `.txt` ファイル名一覧（起動時に読み込み）
+- 選択時にトークン数をカウントしてラベルに表示
+  - 200トークン以下: 緑で `✅ XX トークン / 200`
+  - 200トークン超: 黄色で `⚠️ XX トークン / 200 — 超過分は無視されます`
+  - 動作はブロックしない（警告のみ）
+- トークンカウントには tiktoken（`cl100k_base` エンコーディング）を使用
+
+### 語彙ファイル仕様（`vocabularies/*.txt`）
+- 1行1単語
+- `#` で始まる行はコメントとして無視
+- ファイルが存在しない・ディレクトリが空の場合は `initial_prompt` なしで動作
+
 ### 開始・中断ボタン
 - 「▶ 開始」ボタン
   - 処理中は `state=DISABLED`
@@ -201,7 +219,11 @@ requests
 - ダウンロード完了時にファイルサイズ（MB）をログ出力
 
 #### ステップ3：文字起こし
-- `mlx_whisper.transcribe(audio_file, path_or_hf_repo=model_path, language="ja", word_timestamps=False)`
+- 語彙ファイルが選択されている場合、単語をカンマ区切りで結合して `initial_prompt` を生成
+  - 200トークン超の場合は末尾の単語から切り捨て（tiktoken `cl100k_base` で計算）
+  - tiktoken 未インストール時は切り捨てなしで全単語を使用
+- `initial_prompt` をログに出力（設定されている場合）
+- `mlx_whisper.transcribe(audio_file, path_or_hf_repo=model_path, language="ja", word_timestamps=False, initial_prompt=...)`
 - 結果を `formatter` 関数に渡し、戻り値をファイルに書き込み（UTF-8）
 - `formatter` は `formatter.py` の `custom_formatter`。`None` の場合は `default_formatter` を使用
 

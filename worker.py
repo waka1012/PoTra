@@ -90,6 +90,46 @@ def _to_markdown(segments: list, full_text: str) -> str:
     return "\n".join(lines)
 
 
+def parse_vocab_file(path: pathlib.Path) -> list[str]:
+    """語彙ファイルを読み込み、コメント・空行を除いた単語リストを返す。"""
+    words = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            words.append(line)
+    return words
+
+
+def build_initial_prompt(vocab_path: pathlib.Path | None, token_limit: int = 200) -> str | None:
+    """語彙ファイルから initial_prompt を生成する。token_limit 超の単語は末尾から切り捨て。"""
+    if vocab_path is None or not vocab_path.exists():
+        return None
+    words = parse_vocab_file(vocab_path)
+    if not words:
+        return None
+
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
+        while words and len(enc.encode(", ".join(words))) > token_limit:
+            words.pop()
+    except ImportError:
+        pass  # tiktoken なしの場合は切り捨てなしで全単語を使用
+
+    return ", ".join(words) if words else None
+
+
+def count_vocab_tokens(vocab_path: pathlib.Path) -> int | None:
+    """語彙ファイルのトークン数を返す。tiktoken 未インストール時は None。"""
+    try:
+        import tiktoken
+        words = parse_vocab_file(vocab_path)
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(", ".join(words)))
+    except ImportError:
+        return None
+
+
 def default_formatter(result: dict) -> str:
     """デフォルトの出力フォーマッタ。
 
@@ -111,9 +151,11 @@ def default_formatter(result: dict) -> str:
 
 
 def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_logger,
-             formatter=None):
+             formatter=None, vocab_path=None):
     if formatter is None:
         formatter = default_formatter
+
+    initial_prompt = build_initial_prompt(vocab_path)
 
     total = len(items)
     ok = skip = error = 0
@@ -131,6 +173,8 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
     log("=" * 50)
     log(f"処理開始  全 {total} 件 | モデル: {model_path}")
     log(f"出力先: {output_dir}")
+    if initial_prompt:
+        log(f"initial_prompt: {initial_prompt}")
     log("=" * 50)
     log("")
 
@@ -194,12 +238,14 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
         log("  文字起こし中…")
         try:
             import mlx_whisper
-            result = mlx_whisper.transcribe(
-                audio_file,
+            transcribe_kwargs = dict(
                 path_or_hf_repo=model_path,
                 language="ja",
                 word_timestamps=False,
             )
+            if initial_prompt:
+                transcribe_kwargs["initial_prompt"] = initial_prompt
+            result = mlx_whisper.transcribe(audio_file, **transcribe_kwargs)
             md_text = formatter(result)
             out_path.write_text(md_text, encoding="utf-8")
             log(f"  → 完了: {out_path.name}")

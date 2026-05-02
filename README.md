@@ -103,6 +103,27 @@ Cache location: `~/.cache/huggingface/hub/`
 
 ---
 
+## Vocabulary File (initial_prompt)
+
+Placing `.txt` files in the `vocabularies/` directory lets you specify domain-specific words (proper nouns, technical terms, etc.) that Whisper should prefer during transcription.
+
+**File format** (`vocabularies/my_terms.txt`):
+```
+# Lines starting with # are comments
+田中
+鈴木
+ポッドキャスト
+生成AI
+```
+
+Select the file from the **語彙** dropdown in the GUI. The token count is shown next to the dropdown:
+- ✅ green: within the 200-token limit
+- ⚠️ yellow: over the limit — words will be trimmed from the end
+
+The words are joined with commas and passed as `initial_prompt` to Whisper. If no file is selected, `initial_prompt` is not set.
+
+---
+
 ## Customizing the Output Format
 
 Edit `formatter.py` to change the output format. Set `custom_formatter` to any function that takes a Whisper result and returns a string.

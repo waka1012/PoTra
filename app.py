@@ -7,7 +7,11 @@ import pathlib
 import datetime
 import re
 
-from worker import run_task
+from worker import run_task, parse_vocab_file, count_vocab_tokens
+
+VOCAB_DIR = pathlib.Path(__file__).parent / "vocabularies"
+VOCAB_NONE = "なし"
+VOCAB_TOKEN_LIMIT = 200
 
 
 def _natural_sort_key(s: str) -> list:
@@ -212,6 +216,7 @@ class PoTraApp:
         ).pack(side=tk.LEFT)
 
     def _build_common_controls(self):
+        # 1行目: モデル選択・開始・中断
         ctrl_row = ttk.Frame(self.root)
         ctrl_row.pack(fill=tk.X, padx=8, pady=2)
         ttk.Label(ctrl_row, text="モデル:").pack(side=tk.LEFT)
@@ -232,6 +237,20 @@ class PoTraApp:
             ctrl_row, text="⏹ 中断", command=self._stop, state=tk.DISABLED
         )
         self.stop_btn.pack(side=tk.LEFT, padx=4)
+
+        # 2行目: 語彙ファイル選択
+        vocab_row = ttk.Frame(self.root)
+        vocab_row.pack(fill=tk.X, padx=8, pady=(0, 2))
+        ttk.Label(vocab_row, text="語彙:").pack(side=tk.LEFT)
+        self.vocab_var = tk.StringVar(value=VOCAB_NONE)
+        self.vocab_combo = ttk.Combobox(
+            vocab_row, textvariable=self.vocab_var, state="readonly", width=24
+        )
+        self.vocab_combo.pack(side=tk.LEFT, padx=4)
+        self.vocab_combo.bind("<<ComboboxSelected>>", self._on_vocab_changed)
+        self.vocab_token_label = tk.Label(vocab_row, text="")
+        self.vocab_token_label.pack(side=tk.LEFT, padx=4)
+        self._load_vocab_files()
 
         self.status_var = tk.StringVar(value="待機中")
         ttk.Label(self.root, textvariable=self.status_var).pack(
@@ -362,6 +381,35 @@ class PoTraApp:
     def _update_local_count(self):
         self.local_count_label.config(text=f"{len(self.local_files)} 件")
 
+    # ------------------------------------------------------------------ vocab
+
+    def _load_vocab_files(self):
+        files = [VOCAB_NONE]
+        if VOCAB_DIR.exists():
+            files += sorted(f.name for f in VOCAB_DIR.glob("*.txt"))
+        self.vocab_combo["values"] = files
+        if self.vocab_var.get() not in files:
+            self.vocab_var.set(VOCAB_NONE)
+
+    def _on_vocab_changed(self, _event=None):
+        name = self.vocab_var.get()
+        if name == VOCAB_NONE:
+            self.vocab_token_label.config(text="")
+            return
+        vocab_path = VOCAB_DIR / name
+        count = count_vocab_tokens(vocab_path)
+        if count is None:
+            self.vocab_token_label.config(text="(tiktoken未インストール)", fg="gray")
+        elif count <= VOCAB_TOKEN_LIMIT:
+            self.vocab_token_label.config(
+                text=f"✅ {count} トークン / {VOCAB_TOKEN_LIMIT}", fg="green"
+            )
+        else:
+            self.vocab_token_label.config(
+                text=f"⚠️ {count} トークン / {VOCAB_TOKEN_LIMIT} — 超過分は無視されます",
+                fg="#CC8800",
+            )
+
     # ------------------------------------------------------------------ common
 
     def _browse_folder(self, var: tk.StringVar):
@@ -400,6 +448,9 @@ class PoTraApp:
         output_dir.mkdir(parents=True, exist_ok=True)
         model_path = next(p for n, p in MODELS if n == self.model_var.get())
 
+        vocab_name = self.vocab_var.get()
+        vocab_path = (VOCAB_DIR / vocab_name) if vocab_name != VOCAB_NONE else None
+
         self.stop_requested = False
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
@@ -417,7 +468,7 @@ class PoTraApp:
                 lambda: self.stop_requested,
                 self.file_logger,
             ),
-            kwargs={"formatter": self.formatter},
+            kwargs={"formatter": self.formatter, "vocab_path": vocab_path},
             daemon=True,
         ).start()
 
