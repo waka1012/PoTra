@@ -28,19 +28,17 @@ def _detect_speakers(text: str) -> set[str]:
     return {name for name, count in counter.items() if count >= 3}
 
 
-def _format_segment(
+def _extract_items(
     ts: str, text: str, speakers: set[str], current_speaker: str | None
-) -> tuple[list[str], str | None]:
-    """1セグメントをタイムスタンプ付きの行リストに変換する。
-    話者名が検出できない行は current_speaker を引き継ぐ。
-    戻り値: (行リスト, このセグメントで最後に確定した話者名)"""
+) -> tuple[list[tuple[str, str | None, str]], str | None]:
+    """1セグメントを (timestamp, speaker, text) タプルのリストに変換する。
+    話者切り替えが検出されない場合は current_speaker を引き継ぐ。"""
     text = text.strip()
     if not text:
         return [], current_speaker
 
     if not speakers:
-        label = f"**{current_speaker}**: " if current_speaker else ""
-        return [f"- [{ts}] {label}{text}"], current_speaker
+        return [(ts, current_speaker, text)], current_speaker
 
     sp_pat = (
         "("
@@ -50,42 +48,67 @@ def _format_segment(
     parts = re.split(sp_pat, text)
 
     if len(parts) == 1:
-        # 話者切り替えなし → current_speaker を継続
-        label = f"**{current_speaker}**: " if current_speaker else ""
-        return [f"- [{ts}] {label}{text}"], current_speaker
+        return [(ts, current_speaker, text)], current_speaker
 
-    lines = []
+    items: list[tuple[str, str | None, str]] = []
     last_speaker = current_speaker
 
     intro = parts[0].strip()
     if intro:
-        label = f"**{last_speaker}**: " if last_speaker else ""
-        lines.append(f"- [{ts}] {label}{intro}")
+        items.append((ts, last_speaker, intro))
 
     for i in range(1, len(parts) - 1, 2):
         speaker = parts[i]
         content = parts[i + 1].strip() if i + 1 < len(parts) else ""
         if content:
-            lines.append(f"- [{ts}] **{speaker}**: {content}")
+            items.append((ts, speaker, content))
             last_speaker = speaker
 
-    return lines, last_speaker
+    return items, last_speaker
+
+
+def _merge_consecutive(
+    items: list[tuple[str, str | None, str]],
+) -> list[tuple[str, str | None, str]]:
+    """同一話者の連続アイテムをスペースで結合して1行にまとめる。
+    タイムスタンプは連続セグメントの先頭を使用する。"""
+    if not items:
+        return []
+    merged = []
+    cur_ts, cur_speaker, cur_text = items[0]
+    for ts, speaker, text in items[1:]:
+        if speaker == cur_speaker:
+            cur_text = cur_text + " " + text
+        else:
+            merged.append((cur_ts, cur_speaker, cur_text))
+            cur_ts, cur_speaker, cur_text = ts, speaker, text
+    merged.append((cur_ts, cur_speaker, cur_text))
+    return merged
 
 
 def _to_markdown(segments: list, full_text: str) -> str:
+    """セグメントごとにタイムスタンプ＋話者名で出力する。
+    同一話者の連続セグメントはマージして1行にまとめる。"""
     speakers = _detect_speakers(full_text)
 
     if not segments:
         return full_text.strip()
 
-    lines = []
+    all_items: list[tuple[str, str | None, str]] = []
     current_speaker: str | None = None
     for seg in segments:
         ts = _format_timestamp(seg["start"])
-        seg_lines, current_speaker = _format_segment(
+        seg_items, current_speaker = _extract_items(
             ts, seg["text"], speakers, current_speaker
         )
-        lines.extend(seg_lines)
+        all_items.extend(seg_items)
+
+    lines = []
+    for ts, speaker, text in _merge_consecutive(all_items):
+        if speaker:
+            lines.append(f"- [{ts}] **{speaker}**: {text}")
+        else:
+            lines.append(f"- [{ts}] {text}")
 
     return "\n".join(lines)
 
