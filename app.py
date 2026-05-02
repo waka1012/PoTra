@@ -6,30 +6,47 @@ import logging
 import pathlib
 import datetime
 import re
+import json
 
-from worker import run_task, parse_vocab_file, count_vocab_tokens
+from worker import run_task, count_vocab_tokens
 
 VOCAB_DIR = pathlib.Path(__file__).parent / "vocabularies"
-VOCAB_NONE = "なし"
 VOCAB_TOKEN_LIMIT = 200
+
+# (locale_key, model_path)
+MODEL_PATHS = [
+    ("model_large_v3",       "mlx-community/whisper-large-v3-mlx"),
+    ("model_large_v3_turbo", "mlx-community/whisper-large-v3-turbo"),
+]
 
 
 def _natural_sort_key(s: str) -> list:
     return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", s)]
 
-MODELS = [
-    ("large-v3（高精度）", "mlx-community/whisper-large-v3-mlx"),
-    ("large-v3-turbo（高速）", "mlx-community/whisper-large-v3-turbo"),
-]
+
+def _load_locale() -> dict:
+    base = pathlib.Path(__file__).parent
+    lang = "en"
+    config_path = base / "config.json"
+    if config_path.exists():
+        try:
+            lang = json.loads(config_path.read_text(encoding="utf-8")).get("language", "en")
+        except Exception:
+            pass
+    locale_path = base / "locale" / f"{lang}.json"
+    if not locale_path.exists():
+        locale_path = base / "locale" / "en.json"
+    return json.loads(locale_path.read_text(encoding="utf-8"))
 
 
 class PoTraApp:
     def __init__(self, root: tk.Tk, formatter=None):
         self.root = root
-        self.root.title("PoTra")
+        self.t = _load_locale()
+        self.root.title(self.t["window_title"])
         self.root.geometry("820x750")
 
-        self.formatter = formatter  # None → worker.py の default_formatter が使われる
+        self.formatter = formatter
         self.ui_queue: queue.Queue = queue.Queue()
         self.stop_requested = False
         self.local_files: list[pathlib.Path] = []
@@ -66,58 +83,58 @@ class PoTraApp:
                 missing.append(lib)
         if missing:
             messagebox.showwarning(
-                "依存ライブラリが見つかりません",
-                "以下のライブラリがインストールされていません:\n" + "\n".join(missing),
+                self.t["dlg_missing_libs_title"],
+                self.t["dlg_missing_libs_msg"].format(libs="\n".join(missing)),
             )
 
     # ------------------------------------------------------------------ UI build
 
     def _build_ui(self):
+        t = self.t
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
 
         rss_frame = ttk.Frame(self.notebook)
-        self.notebook.add(rss_frame, text="📡 RSSポッドキャスト")
+        self.notebook.add(rss_frame, text=t["tab_rss"])
         self._build_rss_tab(rss_frame)
 
         local_frame = ttk.Frame(self.notebook)
-        self.notebook.add(local_frame, text="📁 ローカル")
+        self.notebook.add(local_frame, text=t["tab_local"])
         self._build_local_tab(local_frame)
 
         self._build_common_controls()
 
     def _build_rss_tab(self, parent: ttk.Frame):
-        # RSS URL
-        url_lf = ttk.LabelFrame(parent, text="RSS フィード URL")
+        t = self.t
+
+        url_lf = ttk.LabelFrame(parent, text=t["lf_rss_url"])
         url_lf.pack(fill=tk.X, padx=8, pady=4)
         self.rss_url_var = tk.StringVar()
         ttk.Entry(url_lf, textvariable=self.rss_url_var).pack(
             fill=tk.X, padx=4, pady=4
         )
 
-        # Keyword filter
-        kw_lf = ttk.LabelFrame(parent, text="キーワードフィルタ（空欄で全件）")
+        kw_lf = ttk.LabelFrame(parent, text=t["lf_keyword"])
         kw_lf.pack(fill=tk.X, padx=8, pady=4)
         kw_inner = ttk.Frame(kw_lf)
         kw_inner.pack(fill=tk.X, padx=4, pady=4)
         self.keyword_var = tk.StringVar()
         ttk.Entry(kw_inner, textvariable=self.keyword_var, width=40).pack(side=tk.LEFT)
-        ttk.Button(kw_inner, text="🔍 検索", command=self._search_rss).pack(
+        ttk.Button(kw_inner, text=t["btn_search"], command=self._search_rss).pack(
             side=tk.LEFT, padx=4
         )
         self.rss_count_label = ttk.Label(kw_inner, text="")
         self.rss_count_label.pack(side=tk.RIGHT, padx=4)
 
-        # Episode list
-        ep_lf = ttk.LabelFrame(parent, text="エピソード一覧")
+        ep_lf = ttk.LabelFrame(parent, text=t["lf_episodes"])
         ep_lf.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         btn_row = ttk.Frame(ep_lf)
         btn_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Button(btn_row, text="全選択", command=self._select_all_episodes).pack(
+        ttk.Button(btn_row, text=t["btn_select_all"], command=self._select_all_episodes).pack(
             side=tk.LEFT, padx=2
         )
-        ttk.Button(btn_row, text="全解除", command=self._deselect_all_episodes).pack(
+        ttk.Button(btn_row, text=t["btn_deselect_all"], command=self._deselect_all_episodes).pack(
             side=tk.LEFT, padx=2
         )
 
@@ -139,10 +156,9 @@ class PoTraApp:
         self.ep_inner.bind("<Configure>", self._on_ep_inner_configure)
         self.ep_canvas.bind("<Configure>", self._on_ep_canvas_configure)
 
-        # Output folder
         out_row = ttk.Frame(parent)
         out_row.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(out_row, text="出力先フォルダ:").pack(side=tk.LEFT)
+        ttk.Label(out_row, text=t["label_output"]).pack(side=tk.LEFT)
         self.rss_output_var = tk.StringVar(
             value=str(pathlib.Path.home() / "potra_transcripts")
         )
@@ -151,7 +167,7 @@ class PoTraApp:
         )
         ttk.Button(
             out_row,
-            text="選択…",
+            text=t["btn_browse"],
             command=lambda: self._browse_folder(self.rss_output_var),
         ).pack(side=tk.LEFT)
 
@@ -162,20 +178,20 @@ class PoTraApp:
         self.ep_canvas.itemconfig(self._ep_window, width=event.width)
 
     def _build_local_tab(self, parent: ttk.Frame):
-        # File addition
-        add_lf = ttk.LabelFrame(parent, text="ファイル・フォルダ追加")
+        t = self.t
+
+        add_lf = ttk.LabelFrame(parent, text=t["lf_add_files"])
         add_lf.pack(fill=tk.X, padx=8, pady=4)
         add_row = ttk.Frame(add_lf)
         add_row.pack(fill=tk.X, padx=4, pady=4)
         ttk.Button(
-            add_row, text="📄 MP3ファイルを選択（複数可）", command=self._add_files
+            add_row, text=t["btn_add_files"], command=self._add_files
         ).pack(side=tk.LEFT, padx=4)
         ttk.Button(
-            add_row, text="📁 フォルダを選択", command=self._add_folder
+            add_row, text=t["btn_add_folder"], command=self._add_folder
         ).pack(side=tk.LEFT, padx=4)
 
-        # File list
-        list_lf = ttk.LabelFrame(parent, text="ファイル一覧")
+        list_lf = ttk.LabelFrame(parent, text=t["lf_file_list"])
         list_lf.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         lb_frame = ttk.Frame(list_lf)
@@ -191,18 +207,19 @@ class PoTraApp:
         ctrl_row = ttk.Frame(list_lf)
         ctrl_row.pack(fill=tk.X, padx=4, pady=2)
         ttk.Button(
-            ctrl_row, text="選択行を削除", command=self._remove_selected_files
+            ctrl_row, text=t["btn_remove_selected"], command=self._remove_selected_files
         ).pack(side=tk.LEFT, padx=2)
         ttk.Button(
-            ctrl_row, text="リストをクリア", command=self._clear_files
+            ctrl_row, text=t["btn_clear_list"], command=self._clear_files
         ).pack(side=tk.LEFT, padx=2)
-        self.local_count_label = ttk.Label(ctrl_row, text="0 件")
+        self.local_count_label = ttk.Label(
+            ctrl_row, text=t["count_items"].format(n=0)
+        )
         self.local_count_label.pack(side=tk.RIGHT, padx=4)
 
-        # Output folder
         out_row = ttk.Frame(parent)
         out_row.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(out_row, text="出力先フォルダ:").pack(side=tk.LEFT)
+        ttk.Label(out_row, text=t["label_output"]).pack(side=tk.LEFT)
         self.local_output_var = tk.StringVar(
             value=str(pathlib.Path.home() / "potra_transcripts")
         )
@@ -211,38 +228,39 @@ class PoTraApp:
         )
         ttk.Button(
             out_row,
-            text="選択…",
+            text=t["btn_browse"],
             command=lambda: self._browse_folder(self.local_output_var),
         ).pack(side=tk.LEFT)
 
     def _build_common_controls(self):
+        t = self.t
+        model_names = [t[key] for key, _ in MODEL_PATHS]
+
         # 1行目: モデル選択・開始・中断
         ctrl_row = ttk.Frame(self.root)
         ctrl_row.pack(fill=tk.X, padx=8, pady=2)
-        ttk.Label(ctrl_row, text="モデル:").pack(side=tk.LEFT)
-        self.model_var = tk.StringVar(value=MODELS[0][0])
+        ttk.Label(ctrl_row, text=t["label_model"]).pack(side=tk.LEFT)
+        self.model_var = tk.StringVar(value=model_names[0])
         self.model_combo = ttk.Combobox(
             ctrl_row,
             textvariable=self.model_var,
-            values=[m[0] for m in MODELS],
+            values=model_names,
             state="readonly",
             width=28,
         )
         self.model_combo.pack(side=tk.LEFT, padx=4)
-        self.start_btn = ttk.Button(
-            ctrl_row, text="▶ 開始", command=self._start
-        )
+        self.start_btn = ttk.Button(ctrl_row, text=t["btn_start"], command=self._start)
         self.start_btn.pack(side=tk.LEFT, padx=4)
         self.stop_btn = ttk.Button(
-            ctrl_row, text="⏹ 中断", command=self._stop, state=tk.DISABLED
+            ctrl_row, text=t["btn_stop"], command=self._stop, state=tk.DISABLED
         )
         self.stop_btn.pack(side=tk.LEFT, padx=4)
 
         # 2行目: 語彙ファイル選択
         vocab_row = ttk.Frame(self.root)
         vocab_row.pack(fill=tk.X, padx=8, pady=(0, 2))
-        ttk.Label(vocab_row, text="語彙:").pack(side=tk.LEFT)
-        self.vocab_var = tk.StringVar(value=VOCAB_NONE)
+        ttk.Label(vocab_row, text=t["label_vocab"]).pack(side=tk.LEFT)
+        self.vocab_var = tk.StringVar(value=t["vocab_none"])
         self.vocab_combo = ttk.Combobox(
             vocab_row, textvariable=self.vocab_var, state="readonly", width=24
         )
@@ -252,7 +270,7 @@ class PoTraApp:
         self.vocab_token_label.pack(side=tk.LEFT, padx=4)
         self._load_vocab_files()
 
-        self.status_var = tk.StringVar(value="待機中")
+        self.status_var = tk.StringVar(value=t["status_idle"])
         ttk.Label(self.root, textvariable=self.status_var).pack(
             fill=tk.X, padx=8, pady=(2, 0)
         )
@@ -262,9 +280,7 @@ class PoTraApp:
             self.root, variable=self.progress_var, maximum=100
         ).pack(fill=tk.X, padx=8, pady=2)
 
-        ttk.Label(
-            self.root, text="ログ （ファイル保存先: ~/potra_logs/）"
-        ).pack(anchor=tk.W, padx=8)
+        ttk.Label(self.root, text=t["label_log"]).pack(anchor=tk.W, padx=8)
 
         self.log_area = scrolledtext.ScrolledText(
             self.root,
@@ -277,17 +293,18 @@ class PoTraApp:
     # ------------------------------------------------------------------ RSS tab
 
     def _search_rss(self):
+        t = self.t
         url = self.rss_url_var.get().strip()
         if not url:
-            messagebox.showwarning("エラー", "RSS URLを入力してください")
+            messagebox.showwarning(t["dlg_error"], t["dlg_no_rss_url"])
             return
         try:
             import feedparser
         except ImportError:
-            messagebox.showerror("エラー", "feedparser がインストールされていません")
+            messagebox.showerror(t["dlg_error"], t["dlg_no_feedparser"])
             return
 
-        self._log(f"RSS 読み込み中: {url}")
+        self._log(t["log_rss_loading"].format(url=url))
         feed = feedparser.parse(url)
         keyword = self.keyword_var.get().strip()
 
@@ -297,15 +314,15 @@ class PoTraApp:
             audio_url = ""
             for enc in getattr(entry, "enclosures", []):
                 u = enc.get("url", "")
-                t = enc.get("type", "")
-                if "audio" in t or u.lower().endswith((".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg")):
+                tp = enc.get("type", "")
+                if "audio" in tp or u.lower().endswith((".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg")):
                     audio_url = u
                     break
             if not audio_url:
                 for link in getattr(entry, "links", []):
                     u = link.get("href", "")
-                    t = link.get("type", "")
-                    if "audio" in t or u.lower().endswith((".mp3", ".m4a")):
+                    tp = link.get("type", "")
+                    if "audio" in tp or u.lower().endswith((".mp3", ".m4a")):
                         audio_url = u
                         break
             if not audio_url:
@@ -317,11 +334,13 @@ class PoTraApp:
         entries.sort(key=lambda x: _natural_sort_key(x[0]))
 
         count = len(entries)
-        self._log(f"{count} 件見つかりました")
+        self._log(t["log_rss_found"].format(count=count))
         if keyword:
-            self.rss_count_label.config(text=f'{count} 件  キーワード: "{keyword}"')
+            self.rss_count_label.config(
+                text=t["count_keyword"].format(n=count, keyword=keyword)
+            )
         else:
-            self.rss_count_label.config(text=f"{count} 件")
+            self.rss_count_label.config(text=t["count_all"].format(n=count))
 
         for widget in self.ep_inner.winfo_children():
             widget.destroy()
@@ -346,8 +365,8 @@ class PoTraApp:
 
     def _add_files(self):
         filetypes = [
-            ("音声ファイル", "*.mp3 *.m4a *.wav *.flac *.aac *.ogg"),
-            ("すべて", "*"),
+            ("Audio files", "*.mp3 *.m4a *.wav *.flac *.aac *.ogg"),
+            ("All files", "*"),
         ]
         paths = filedialog.askopenfilenames(filetypes=filetypes)
         for p in paths:
@@ -379,34 +398,39 @@ class PoTraApp:
         self._update_local_count()
 
     def _update_local_count(self):
-        self.local_count_label.config(text=f"{len(self.local_files)} 件")
+        self.local_count_label.config(
+            text=self.t["count_items"].format(n=len(self.local_files))
+        )
 
     # ------------------------------------------------------------------ vocab
 
     def _load_vocab_files(self):
-        files = [VOCAB_NONE]
+        t = self.t
+        files = [t["vocab_none"]]
         if VOCAB_DIR.exists():
             files += sorted(f.name for f in VOCAB_DIR.glob("*.txt"))
         self.vocab_combo["values"] = files
         if self.vocab_var.get() not in files:
-            self.vocab_var.set(VOCAB_NONE)
+            self.vocab_var.set(t["vocab_none"])
 
     def _on_vocab_changed(self, _event=None):
+        t = self.t
         name = self.vocab_var.get()
-        if name == VOCAB_NONE:
+        if name == t["vocab_none"]:
             self.vocab_token_label.config(text="")
             return
         vocab_path = VOCAB_DIR / name
         count = count_vocab_tokens(vocab_path)
         if count is None:
-            self.vocab_token_label.config(text="(tiktoken未インストール)", fg="gray")
+            self.vocab_token_label.config(text=t["vocab_no_tiktoken"], fg="gray")
         elif count <= VOCAB_TOKEN_LIMIT:
             self.vocab_token_label.config(
-                text=f"✅ {count} トークン / {VOCAB_TOKEN_LIMIT}", fg="green"
+                text=t["vocab_token_ok"].format(count=count, limit=VOCAB_TOKEN_LIMIT),
+                fg="green",
             )
         else:
             self.vocab_token_label.config(
-                text=f"⚠️ {count} トークン / {VOCAB_TOKEN_LIMIT} — 超過分は無視されます",
+                text=t["vocab_token_over"].format(count=count, limit=VOCAB_TOKEN_LIMIT),
                 fg="#CC8800",
             )
 
@@ -418,6 +442,7 @@ class PoTraApp:
             var.set(folder)
 
     def _start(self):
+        t = self.t
         tab_index = self.notebook.index(self.notebook.select())
 
         if tab_index == 0:
@@ -427,13 +452,13 @@ class PoTraApp:
                 if var.get()
             ]
             if not items:
-                messagebox.showwarning("警告", "エピソードが選択されていません")
+                messagebox.showwarning(t["dlg_warning"], t["dlg_no_episodes"])
                 return
             output_dir = pathlib.Path(self.rss_output_var.get())
             mode = "rss"
         else:
             if not self.local_files:
-                messagebox.showwarning("警告", "ファイルが追加されていません")
+                messagebox.showwarning(t["dlg_warning"], t["dlg_no_files"])
                 return
             items = [(p.stem, str(p)) for p in self.local_files]
             output_dir = pathlib.Path(self.local_output_var.get())
@@ -442,20 +467,20 @@ class PoTraApp:
         try:
             import mlx_whisper  # noqa: F401
         except ImportError:
-            messagebox.showerror("エラー", "mlx_whisper がインストールされていません")
+            messagebox.showerror(t["dlg_error"], t["dlg_no_mlx_whisper"])
             return
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        model_path = next(p for n, p in MODELS if n == self.model_var.get())
+        model_path = MODEL_PATHS[self.model_combo.current()][1]
 
         vocab_name = self.vocab_var.get()
-        vocab_path = (VOCAB_DIR / vocab_name) if vocab_name != VOCAB_NONE else None
+        vocab_path = (VOCAB_DIR / vocab_name) if vocab_name != t["vocab_none"] else None
 
         self.stop_requested = False
         self.start_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
         self.progress_var.set(0)
-        self.status_var.set("待機中")
+        self.status_var.set(t["status_idle"])
 
         threading.Thread(
             target=run_task,
@@ -468,18 +493,23 @@ class PoTraApp:
                 lambda: self.stop_requested,
                 self.file_logger,
             ),
-            kwargs={"formatter": self.formatter, "vocab_path": vocab_path},
+            kwargs={
+                "formatter": self.formatter,
+                "vocab_path": vocab_path,
+                "messages": t,
+            },
             daemon=True,
         ).start()
 
     def _stop(self):
         self.stop_requested = True
-        self.status_var.set("中断中…（現在の処理が終わり次第停止）")
+        self.status_var.set(self.t["status_stopping"])
         self.stop_btn.config(state=tk.DISABLED)
 
     # ------------------------------------------------------------------ queue polling
 
     def _poll_ui_queue(self):
+        t = self.t
         try:
             while True:
                 msg = self.ui_queue.get_nowait()
@@ -493,7 +523,7 @@ class PoTraApp:
                 elif mtype == "done":
                     ok, skip, err = msg["ok"], msg["skip"], msg["error"]
                     self.status_var.set(
-                        f"完了: {ok} 件 / スキップ: {skip} 件 / エラー: {err} 件"
+                        t["status_done"].format(ok=ok, skip=skip, error=err)
                     )
                     self.progress_var.set(100)
                     self.start_btn.config(state=tk.NORMAL)

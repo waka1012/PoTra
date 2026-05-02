@@ -29,6 +29,10 @@ potra/
 ├── app.py             # メインアプリクラス
 ├── worker.py          # バックグラウンド処理（ダウンロード・文字起こし）
 ├── formatter.py       # 出力フォーマットのカスタマイズ（ユーザー編集用）
+├── config.json        # 言語設定（"language": "en" または "ja"）
+├── locale/
+│   ├── en.json        # 英語テキスト（デフォルト）
+│   └── ja.json        # 日本語テキスト
 ├── vocabularies/      # 語彙ファイル置き場（.txt ファイルを配置）
 │   └── sample.txt
 ├── requirements.txt
@@ -309,6 +313,31 @@ custom_formatter = custom_formatter  # 有効化
 - フォーマット: `%(asctime)s [%(levelname)s] %(message)s`
 - レベル: DEBUG（ファイル）、INFO/ERROR（GUIと同等）
 - アプリ起動時に1ファイル生成（セッション単位）
+
+---
+
+## 多言語対応（i18n）
+
+### 仕組み
+- GUI に表示するすべてのテキストは `locale/<lang>.json` で管理する
+- アプリ起動時に `config.json` の `"language"` キーを読み込み、対応する JSON を読む
+- JSON が存在しない場合は `locale/en.json`（英語）にフォールバックする
+- `worker.py` の `run_task` も `messages=` でロケール辞書を受け取り、ログ文字列を切り替える
+
+### 設定ファイル
+`config.json`（デフォルト: 英語）:
+```json
+{ "language": "en" }
+```
+
+日本語に切り替えるには:
+```json
+{ "language": "ja" }
+```
+
+### ロケールファイルの構造
+`locale/en.json` と `locale/ja.json` に同一キーセットを持たせる。  
+新言語を追加する場合は同名のキーを持つ JSON を `locale/` に置き、`config.json` を変更する。
 
 ---
 

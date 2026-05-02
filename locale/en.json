@@ -1,0 +1,70 @@
+{
+  "window_title": "PoTra",
+  "tab_rss": "📡 RSS Podcast",
+  "tab_local": "📁 Local Files",
+
+  "lf_rss_url": "RSS Feed URL",
+  "lf_keyword": "Keyword Filter (leave blank for all)",
+  "btn_search": "🔍 Search",
+  "lf_episodes": "Episode List",
+  "btn_select_all": "Select All",
+  "btn_deselect_all": "Deselect All",
+  "label_output": "Output Folder:",
+  "btn_browse": "Browse…",
+
+  "lf_add_files": "Add Files / Folder",
+  "btn_add_files": "📄 Select Audio Files (multi-select)",
+  "btn_add_folder": "📁 Select Folder",
+  "lf_file_list": "File List",
+  "btn_remove_selected": "Remove Selected",
+  "btn_clear_list": "Clear List",
+
+  "label_model": "Model:",
+  "model_large_v3": "large-v3 (Accurate)",
+  "model_large_v3_turbo": "large-v3-turbo (Fast)",
+
+  "label_vocab": "Vocabulary:",
+  "vocab_none": "None",
+  "vocab_token_ok": "✅ {count} tokens / {limit}",
+  "vocab_token_over": "⚠️ {count} tokens / {limit} — excess will be ignored",
+  "vocab_no_tiktoken": "(tiktoken not installed)",
+
+  "btn_start": "▶ Start",
+  "btn_stop": "⏹ Stop",
+  "label_log": "Log (saved to: ~/potra_logs/)",
+
+  "status_idle": "Idle",
+  "status_stopping": "Stopping… (will stop after current file)",
+  "status_done": "Done: {ok} / Skipped: {skip} / Errors: {error}",
+
+  "count_items": "{n} file(s)",
+  "count_all": "{n} episode(s)",
+  "count_keyword": "{n} episode(s)  Keyword: \"{keyword}\"",
+
+  "dlg_error": "Error",
+  "dlg_warning": "Warning",
+  "dlg_missing_libs_title": "Missing Dependencies",
+  "dlg_missing_libs_msg": "The following libraries are not installed:\n{libs}",
+  "dlg_no_rss_url": "Please enter an RSS feed URL.",
+  "dlg_no_feedparser": "feedparser is not installed.",
+  "dlg_no_episodes": "No episodes selected.",
+  "dlg_no_files": "No files added.",
+  "dlg_no_mlx_whisper": "mlx_whisper is not installed.",
+
+  "log_rss_loading": "Loading RSS: {url}",
+  "log_rss_found": "Found {count} episode(s)",
+
+  "log_start": "Starting  {total} file(s) | Model: {model}",
+  "log_output": "Output: {dir}",
+  "log_prompt": "initial_prompt: {prompt}",
+  "log_item": "[{i}/{total}] {title}",
+  "log_skip": "  Skipping (exists): {name}",
+  "log_downloading": "  Downloading…",
+  "log_download_done": "  Downloaded: {name} ({size:.1f} MB)",
+  "log_download_error": "  Download error: {error}",
+  "log_download_interrupted": "  Download interrupted",
+  "log_transcribing": "  Transcribing…",
+  "log_transcribe_done": "  → Done: {name}",
+  "log_transcribe_error": "  Transcription error: {error}",
+  "log_interrupted": "Stopped."
+}

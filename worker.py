@@ -190,9 +190,14 @@ def default_formatter(result: dict) -> str:
 
 
 def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_logger,
-             formatter=None, vocab_path=None):
+             formatter=None, vocab_path=None, messages=None):
     if formatter is None:
         formatter = default_formatter
+
+    # ロケール文字列ルックアップ（messages がない場合はキーをそのまま返す）
+    def m(key, **kwargs):
+        s = messages.get(key, key) if messages else key
+        return s.format(**kwargs) if kwargs else s
 
     initial_prompt = build_initial_prompt(vocab_path)
 
@@ -210,28 +215,28 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
         ui_queue.put({"type": "progress", "value": value})
 
     log("=" * 50)
-    log(f"処理開始  全 {total} 件 | モデル: {model_path}")
-    log(f"出力先: {output_dir}")
+    log(m("log_start", total=total, model=model_path))
+    log(m("log_output", dir=output_dir))
     if initial_prompt:
-        log(f"initial_prompt: {initial_prompt}")
+        log(m("log_prompt", prompt=initial_prompt))
     log("=" * 50)
     log("")
 
     for i, (title, source) in enumerate(items, 1):
         if stop_check():
-            log("中断されました")
+            log(m("log_interrupted"))
             break
 
         progress((i - 1) / total * 100)
-        status(f"({i}/{total}) {title}")
+        status(m("log_item", i=i, total=total, title=title))
 
         safe_name = _safe_filename(title)
         out_path = pathlib.Path(output_dir) / f"{safe_name}.md"
 
-        log(f"[{i}/{total}] {title}")
+        log(m("log_item", i=i, total=total, title=title))
 
         if out_path.exists():
-            log(f"  スキップ（既存）: {out_path.name}")
+            log(m("log_skip", name=out_path.name))
             skip += 1
             log("")
             continue
@@ -239,7 +244,7 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
         if mode == "rss":
             mp3_path = pathlib.Path(output_dir) / f"{safe_name}.mp3"
             if not mp3_path.exists():
-                log("  ダウンロード中…")
+                log(m("log_downloading"))
                 tmp_path = mp3_path.with_suffix(".mp3.tmp")
                 interrupted = False
                 try:
@@ -255,26 +260,26 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
                                 f.write(chunk)
                 except Exception as e:
                     tmp_path.unlink(missing_ok=True)
-                    log(f"  ダウンロードエラー: {e}")
-                    file_logger.error(f"ダウンロードエラー [{title}]: {e}")
+                    log(m("log_download_error", error=e))
+                    file_logger.error(f"Download error [{title}]: {e}")
                     error += 1
                     log("")
                     continue
 
                 if interrupted:
                     tmp_path.unlink(missing_ok=True)
-                    log("  ダウンロード中断")
+                    log(m("log_download_interrupted"))
                     log("")
                     break
 
                 tmp_path.rename(mp3_path)
                 size_mb = mp3_path.stat().st_size / 1024 / 1024
-                log(f"  ダウンロード完了: {mp3_path.name} ({size_mb:.1f} MB)")
+                log(m("log_download_done", name=mp3_path.name, size=size_mb))
             audio_file = str(mp3_path)
         else:
             audio_file = source
 
-        log("  文字起こし中…")
+        log(m("log_transcribing"))
         try:
             import mlx_whisper
             transcribe_kwargs = dict(
@@ -287,11 +292,11 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
             result = mlx_whisper.transcribe(audio_file, **transcribe_kwargs)
             md_text = formatter(result)
             out_path.write_text(md_text, encoding="utf-8")
-            log(f"  → 完了: {out_path.name}")
+            log(m("log_transcribe_done", name=out_path.name))
             ok += 1
         except Exception as e:
-            log(f"  文字起こしエラー: {e}")
-            file_logger.error(f"文字起こしエラー [{title}]: {e}")
+            log(m("log_transcribe_error", error=e))
+            file_logger.error(f"Transcription error [{title}]: {e}")
             error += 1
 
         log("")

@@ -103,6 +103,23 @@ Cache location: `~/.cache/huggingface/hub/`
 
 ---
 
+## Switching the Display Language
+
+Edit `config.json` in the project root and change the `language` value:
+
+```json
+{ "language": "en" }
+```
+
+| Value | Language |
+|---|---|
+| `"ja"` | 日本語 (default) |
+| `"en"` | English |
+
+Restart the app after saving. All UI labels, buttons, status messages, and log output will switch to the selected language.
+
+---
+
 ## Vocabulary File (initial_prompt)
 
 Placing `.txt` files in the `vocabularies/` directory lets you specify domain-specific words (proper nouns, technical terms, etc.) that Whisper should prefer during transcription.

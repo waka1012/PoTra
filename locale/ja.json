@@ -1,0 +1,70 @@
+{
+  "window_title": "PoTra",
+  "tab_rss": "📡 RSSポッドキャスト",
+  "tab_local": "📁 ローカル",
+
+  "lf_rss_url": "RSS フィード URL",
+  "lf_keyword": "キーワードフィルタ（空欄で全件）",
+  "btn_search": "🔍 検索",
+  "lf_episodes": "エピソード一覧",
+  "btn_select_all": "全選択",
+  "btn_deselect_all": "全解除",
+  "label_output": "出力先フォルダ:",
+  "btn_browse": "選択…",
+
+  "lf_add_files": "ファイル・フォルダ追加",
+  "btn_add_files": "📄 MP3ファイルを選択（複数可）",
+  "btn_add_folder": "📁 フォルダを選択",
+  "lf_file_list": "ファイル一覧",
+  "btn_remove_selected": "選択行を削除",
+  "btn_clear_list": "リストをクリア",
+
+  "label_model": "モデル:",
+  "model_large_v3": "large-v3（高精度）",
+  "model_large_v3_turbo": "large-v3-turbo（高速）",
+
+  "label_vocab": "語彙:",
+  "vocab_none": "なし",
+  "vocab_token_ok": "✅ {count} トークン / {limit}",
+  "vocab_token_over": "⚠️ {count} トークン / {limit} — 超過分は無視されます",
+  "vocab_no_tiktoken": "(tiktoken未インストール)",
+
+  "btn_start": "▶ 開始",
+  "btn_stop": "⏹ 中断",
+  "label_log": "ログ （ファイル保存先: ~/potra_logs/）",
+
+  "status_idle": "待機中",
+  "status_stopping": "中断中…（現在の処理が終わり次第停止）",
+  "status_done": "完了: {ok} 件 / スキップ: {skip} 件 / エラー: {error} 件",
+
+  "count_items": "{n} 件",
+  "count_all": "{n} 件",
+  "count_keyword": "{n} 件  キーワード: \"{keyword}\"",
+
+  "dlg_error": "エラー",
+  "dlg_warning": "警告",
+  "dlg_missing_libs_title": "依存ライブラリが見つかりません",
+  "dlg_missing_libs_msg": "以下のライブラリがインストールされていません:\n{libs}",
+  "dlg_no_rss_url": "RSS URLを入力してください",
+  "dlg_no_feedparser": "feedparser がインストールされていません",
+  "dlg_no_episodes": "エピソードが選択されていません",
+  "dlg_no_files": "ファイルが追加されていません",
+  "dlg_no_mlx_whisper": "mlx_whisper がインストールされていません",
+
+  "log_rss_loading": "RSS 読み込み中: {url}",
+  "log_rss_found": "{count} 件見つかりました",
+
+  "log_start": "処理開始  全 {total} 件 | モデル: {model}",
+  "log_output": "出力先: {dir}",
+  "log_prompt": "initial_prompt: {prompt}",
+  "log_item": "[{i}/{total}] {title}",
+  "log_skip": "  スキップ（既存）: {name}",
+  "log_downloading": "  ダウンロード中…",
+  "log_download_done": "  ダウンロード完了: {name} ({size:.1f} MB)",
+  "log_download_error": "  ダウンロードエラー: {error}",
+  "log_download_interrupted": "  ダウンロード中断",
+  "log_transcribing": "  文字起こし中…",
+  "log_transcribe_done": "  → 完了: {name}",
+  "log_transcribe_error": "  文字起こしエラー: {error}",
+  "log_interrupted": "中断されました"
+}
