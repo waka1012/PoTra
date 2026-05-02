@@ -12,10 +12,10 @@
 ## 出力サンプル
 
 ```markdown
-- [00:00:05] **深井**: はい同じ株式会社コテンの陽英史です
-- [00:00:12] **樋口**: このラジオは歴史を愛し歴史の面白さを知りすぎてしまった
-- [00:00:30] **深井**: 3日間ありますね
-- [00:00:33] **樋口**: 大体3日やってるんですけど
+- [00:00:05] **鈴木**: 今日のテーマについて教えてもらえますか？
+- [00:00:12] **田中**: はい、今回は生成AIの最新動向についてお話しします。
+- [00:00:30] **鈴木**: 特に注目しているポイントはありますか？
+- [00:00:33] **田中**: やはりマルチモーダルの進化が面白いですね。
 ```
 
 話者名はテキスト中に出現するパターンから自動検出します。  
@@ -98,6 +98,51 @@ python main.py
 
 - 既存の `.md` ファイルはスキップされます（途中中断・再実行が安全）
 - RSSでダウンロード済みの `.mp3` は再ダウンロードされません
+
+---
+
+## 出力フォーマットのカスタマイズ
+
+`formatter.py` を編集することで、出力形式を自由に変更できます。  
+`custom_formatter` に関数を設定するだけです。
+
+```python
+# formatter.py
+
+def custom_formatter(result):
+    # result["text"]                 : 全文テキスト（str）
+    # result["segments"][n]["start"] : 開始時刻（秒、float）
+    # result["segments"][n]["end"]   : 終了時刻（秒、float）
+    # result["segments"][n]["text"]  : セグメントのテキスト
+    ...
+    return "出力したい文字列"
+
+custom_formatter = custom_formatter  # 有効化
+```
+
+`custom_formatter = None`（デフォルト）のままにすると、組み込みフォーマッタ（タイムスタンプ＋話者検出 Markdown）が使われます。
+
+**例1: プレーンテキストで出力**
+```python
+def custom_formatter(result):
+    return result["text"].strip()
+
+custom_formatter = custom_formatter
+```
+
+**例2: SRT 字幕形式で出力**
+```python
+def custom_formatter(result):
+    def fmt(s):
+        h, m = int(s // 3600), int((s % 3600) // 60)
+        return f"{h:02d}:{m:02d}:{int(s % 60):02d},{int(s * 1000 % 1000):03d}"
+    lines = []
+    for i, seg in enumerate(result["segments"], 1):
+        lines += [str(i), f"{fmt(seg['start'])} --> {fmt(seg['end'])}", seg["text"].strip(), ""]
+    return "\n".join(lines)
+
+custom_formatter = custom_formatter
+```
 
 ---
 

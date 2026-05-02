@@ -20,11 +20,12 @@ MODELS = [
 
 
 class PoTraApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, formatter=None):
         self.root = root
         self.root.title("PoTra")
         self.root.geometry("820x750")
 
+        self.formatter = formatter  # None → worker.py の default_formatter が使われる
         self.ui_queue: queue.Queue = queue.Queue()
         self.stop_requested = False
         self.local_files: list[pathlib.Path] = []
@@ -416,6 +417,7 @@ class PoTraApp:
                 lambda: self.stop_requested,
                 self.file_logger,
             ),
+            kwargs={"formatter": self.formatter},
             daemon=True,
         ).start()
 

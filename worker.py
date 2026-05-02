@@ -73,8 +73,6 @@ def _format_segment(
 
 
 def _to_markdown(segments: list, full_text: str) -> str:
-    """セグメントごとにタイムスタンプ＋話者名で出力する。
-    話者切り替えが検出されない行は直前の話者を引き継ぐ。"""
     speakers = _detect_speakers(full_text)
 
     if not segments:
@@ -92,7 +90,31 @@ def _to_markdown(segments: list, full_text: str) -> str:
     return "\n".join(lines)
 
 
-def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_logger):
+def default_formatter(result: dict) -> str:
+    """デフォルトの出力フォーマッタ。
+
+    カスタマイズする場合は、同じシグネチャを持つ関数を定義して
+    main.py の PoTraApp(root, formatter=...) に渡してください。
+
+    Args:
+        result: mlx_whisper.transcribe() の戻り値。主なキー:
+            result["text"]     : str   全文テキスト
+            result["segments"] : list  セグメントのリスト
+                segment["start"] : float  開始時刻（秒）
+                segment["end"]   : float  終了時刻（秒）
+                segment["text"]  : str    テキスト
+
+    Returns:
+        出力ファイルに書き込む文字列。
+    """
+    return _to_markdown(result.get("segments", []), result.get("text", ""))
+
+
+def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_logger,
+             formatter=None):
+    if formatter is None:
+        formatter = default_formatter
+
     total = len(items)
     ok = skip = error = 0
 
@@ -178,10 +200,7 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
                 language="ja",
                 word_timestamps=False,
             )
-            md_text = _to_markdown(
-                result.get("segments", []),
-                result.get("text", ""),
-            )
+            md_text = formatter(result)
             out_path.write_text(md_text, encoding="utf-8")
             log(f"  → 完了: {out_path.name}")
             ok += 1

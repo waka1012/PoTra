@@ -14,10 +14,10 @@ Local audio files can also be transcribed directly.
 ## Output Sample
 
 ```markdown
-- [00:00:05] **Fukui**: This is a history curation program...
-- [00:00:12] **Higuchi**: Welcome to Coten Radio...
-- [00:00:30] **Fukui**: Let's get started.
-- [00:00:33] **Higuchi**: Yes, let's dive in.
+- [00:00:05] **Suzuki**: Could you tell us about today's topic?
+- [00:00:12] **Tanaka**: Sure, today we'll be discussing the latest trends in generative AI.
+- [00:00:30] **Suzuki**: Is there a particular area you're most excited about?
+- [00:00:33] **Tanaka**: Definitely the advances in multimodal models.
 ```
 
 Speaker names are automatically detected from patterns in the transcribed text.
@@ -100,6 +100,51 @@ Cache location: `~/.cache/huggingface/hub/`
 
 - Existing `.md` files are skipped, making it safe to stop and resume at any time.
 - Already-downloaded `.mp3` files are not re-downloaded.
+
+---
+
+## Customizing the Output Format
+
+Edit `formatter.py` to change the output format. Set `custom_formatter` to any function that takes a Whisper result and returns a string.
+
+```python
+# formatter.py
+
+def custom_formatter(result):
+    # result["text"]              : full transcript as a single string
+    # result["segments"][n]["start"] : start time in seconds (float)
+    # result["segments"][n]["end"]   : end time in seconds (float)
+    # result["segments"][n]["text"]  : segment text
+    ...
+    return "your formatted string"
+
+custom_formatter = custom_formatter  # enable your formatter
+```
+
+Setting `custom_formatter = None` (the default) uses the built-in formatter:
+timestamped Markdown with automatic speaker detection.
+
+**Example: plain text output**
+```python
+def custom_formatter(result):
+    return result["text"].strip()
+
+custom_formatter = custom_formatter
+```
+
+**Example: SRT subtitle format**
+```python
+def custom_formatter(result):
+    def fmt(s):
+        h, m = int(s // 3600), int((s % 3600) // 60)
+        return f"{h:02d}:{m:02d}:{int(s % 60):02d},{int(s * 1000 % 1000):03d}"
+    lines = []
+    for i, seg in enumerate(result["segments"], 1):
+        lines += [str(i), f"{fmt(seg['start'])} --> {fmt(seg['end'])}", seg["text"].strip(), ""]
+    return "\n".join(lines)
+
+custom_formatter = custom_formatter
+```
 
 ---
 
