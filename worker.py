@@ -121,6 +121,7 @@ def _to_markdown(segments: list, full_text: str) -> str:
 
     lines = []
     for ts, speaker, text in _merge_consecutive(all_items):
+        text = text + _join_sep(text).rstrip()  # 行末に句読点を付加
         if speaker:
             lines.append(f"- [{ts}] **{speaker}**: {text}")
         else:
