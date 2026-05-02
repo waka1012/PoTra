@@ -67,18 +67,34 @@ def _extract_items(
     return items, last_speaker
 
 
+_JP_RE = re.compile(r'[ぁ-んァ-ヶ一-龯]')
+_JP_END = frozenset("。！？…")
+_EN_END = frozenset(".!?")
+
+
+def _join_sep(text: str) -> str:
+    """テキストの言語に応じたセグメント結合用の区切り文字を返す。
+    既に句読点で終わっている場合は区切りを追加しない。"""
+    t = text.rstrip()
+    if _JP_RE.search(t):
+        return "" if (t and t[-1] in _JP_END) else "。"
+    else:
+        return "" if (t and t[-1] in _EN_END) else ". "
+
+
 def _merge_consecutive(
     items: list[tuple[str, str | None, str]],
 ) -> list[tuple[str, str | None, str]]:
-    """同一話者の連続アイテムをスペースで結合して1行にまとめる。
-    タイムスタンプは連続セグメントの先頭を使用する。"""
+    """同一話者の連続アイテムを結合して1行にまとめる。
+    タイムスタンプは連続セグメントの先頭を使用する。
+    日本語は「。」、英語は「. 」で文を区切る。"""
     if not items:
         return []
     merged = []
     cur_ts, cur_speaker, cur_text = items[0]
     for ts, speaker, text in items[1:]:
         if speaker == cur_speaker:
-            cur_text = cur_text + " " + text
+            cur_text = cur_text + _join_sep(cur_text) + text
         else:
             merged.append((cur_ts, cur_speaker, cur_text))
             cur_ts, cur_speaker, cur_text = ts, speaker, text
