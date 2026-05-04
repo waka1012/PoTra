@@ -54,6 +54,8 @@
   "log_rss_loading": "Loading RSS: {url}",
   "log_rss_found": "Found {count} episode(s)",
 
+  "log_phase_download": "── Phase 1: Downloading ──",
+  "log_phase_transcribe": "── Phase 2: Transcribing ──",
   "log_start": "Starting  {total} file(s) | Model: {model}",
   "log_output": "Output: {dir}",
   "log_prompt": "initial_prompt: {prompt}",

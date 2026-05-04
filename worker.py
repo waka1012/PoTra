@@ -215,6 +215,8 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
     def progress(value):
         ui_queue.put({"type": "progress", "value": value})
 
+    output_dir = pathlib.Path(output_dir)
+
     log("=" * 50)
     log(m("log_start", total=total, model=model_path))
     log(m("log_output", dir=output_dir))
@@ -223,63 +225,8 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
     log("=" * 50)
     log("")
 
-    for i, (title, source) in enumerate(items, 1):
-        if stop_check():
-            log(m("log_interrupted"))
-            break
-
-        progress((i - 1) / total * 100)
-        status(m("log_item", i=i, total=total, title=title))
-
-        safe_name = _safe_filename(title)
-        out_path = pathlib.Path(output_dir) / f"{safe_name}.md"
-
-        log(m("log_item", i=i, total=total, title=title))
-
-        if out_path.exists():
-            log(m("log_skip", name=out_path.name))
-            skip += 1
-            log("")
-            continue
-
-        if mode == "rss":
-            mp3_path = pathlib.Path(output_dir) / f"{safe_name}.mp3"
-            if not mp3_path.exists():
-                log(m("log_downloading"))
-                tmp_path = mp3_path.with_suffix(".mp3.tmp")
-                interrupted = False
-                try:
-                    import requests
-                    resp = requests.get(source, stream=True, timeout=120)
-                    resp.raise_for_status()
-                    with open(tmp_path, "wb") as f:
-                        for chunk in resp.iter_content(chunk_size=65536):
-                            if stop_check():
-                                interrupted = True
-                                break
-                            if chunk:
-                                f.write(chunk)
-                except Exception as e:
-                    tmp_path.unlink(missing_ok=True)
-                    log(m("log_download_error", error=e))
-                    file_logger.error(f"Download error [{title}]: {e}")
-                    error += 1
-                    log("")
-                    continue
-
-                if interrupted:
-                    tmp_path.unlink(missing_ok=True)
-                    log(m("log_download_interrupted"))
-                    log("")
-                    break
-
-                tmp_path.rename(mp3_path)
-                size_mb = mp3_path.stat().st_size / 1024 / 1024
-                log(m("log_download_done", name=mp3_path.name, size=size_mb))
-            audio_file = str(mp3_path)
-        else:
-            audio_file = source
-
+    def _transcribe(title, audio_file, out_path):
+        """1ファイルを文字起こしして保存。ok/error を (+1, 0) か (0, +1) で返す。"""
         log(m("log_transcribing"))
         try:
             import mlx_whisper
@@ -291,14 +238,127 @@ def run_task(items, mode, output_dir, model_path, ui_queue, stop_check, file_log
             if initial_prompt:
                 transcribe_kwargs["initial_prompt"] = initial_prompt
             result = mlx_whisper.transcribe(audio_file, **transcribe_kwargs)
-            md_text = formatter(result)
-            out_path.write_text(md_text, encoding="utf-8")
+            out_path.write_text(formatter(result), encoding="utf-8")
             log(m("log_transcribe_done", name=out_path.name))
-            ok += 1
+            return 1, 0
         except Exception as e:
             log(m("log_transcribe_error", error=e))
             file_logger.error(f"Transcription error [{title}]: {e}")
-            error += 1
+            return 0, 1
+
+    if mode == "rss":
+        # ── フェーズ1: 全件ダウンロード ──────────────────────────────
+        log(m("log_phase_download"))
+        log("")
+        ready: list[tuple[str, str]] = []  # (title, mp3_path)
+
+        for i, (title, url) in enumerate(items, 1):
+            if stop_check():
+                log(m("log_interrupted"))
+                ui_queue.put({"type": "done", "ok": ok, "skip": skip, "error": error})
+                return
+
+            progress((i - 1) / total * 50)
+            status(m("log_item", i=i, total=total, title=title))
+
+            safe_name = _safe_filename(title)
+            out_path = output_dir / f"{safe_name}.md"
+            mp3_path = output_dir / f"{safe_name}.mp3"
+
+            log(m("log_item", i=i, total=total, title=title))
+
+            if out_path.exists():
+                log(m("log_skip", name=out_path.name))
+                skip += 1
+                log("")
+                continue
+
+            if mp3_path.exists():
+                ready.append((title, str(mp3_path)))
+                log("")
+                continue
+
+            log(m("log_downloading"))
+            tmp_path = mp3_path.with_suffix(".mp3.tmp")
+            interrupted = False
+            try:
+                import requests
+                resp = requests.get(url, stream=True, timeout=120)
+                resp.raise_for_status()
+                with open(tmp_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if stop_check():
+                            interrupted = True
+                            break
+                        if chunk:
+                            f.write(chunk)
+            except Exception as e:
+                tmp_path.unlink(missing_ok=True)
+                log(m("log_download_error", error=e))
+                file_logger.error(f"Download error [{title}]: {e}")
+                error += 1
+                log("")
+                continue
+
+            if interrupted:
+                tmp_path.unlink(missing_ok=True)
+                log(m("log_download_interrupted"))
+                log("")
+                break
+
+            tmp_path.rename(mp3_path)
+            size_mb = mp3_path.stat().st_size / 1024 / 1024
+            log(m("log_download_done", name=mp3_path.name, size=size_mb))
+            ready.append((title, str(mp3_path)))
+            log("")
+
+        # ── フェーズ2: 全件文字起こし ─────────────────────────────────
+        n_trans = len(ready)
+        if n_trans > 0:
+            log(m("log_phase_transcribe"))
+            log("")
+
+        for j, (title, audio_file) in enumerate(ready, 1):
+            if stop_check():
+                log(m("log_interrupted"))
+                break
+
+            progress(50 + (j - 1) / n_trans * 50)
+            status(m("log_item", i=j, total=n_trans, title=title))
+
+            safe_name = _safe_filename(title)
+            out_path = output_dir / f"{safe_name}.md"
+            log(m("log_item", i=j, total=n_trans, title=title))
+
+            d_ok, d_err = _transcribe(title, audio_file, out_path)
+            ok += d_ok
+            error += d_err
+            log("")
+
+    else:
+        # ── ローカルモード: スキップ確認 → 文字起こし（1パス）──────────
+        for i, (title, source) in enumerate(items, 1):
+            if stop_check():
+                log(m("log_interrupted"))
+                break
+
+            progress((i - 1) / total * 100)
+            status(m("log_item", i=i, total=total, title=title))
+
+            safe_name = _safe_filename(title)
+            out_path = output_dir / f"{safe_name}.md"
+            log(m("log_item", i=i, total=total, title=title))
+
+            if out_path.exists():
+                log(m("log_skip", name=out_path.name))
+                skip += 1
+                log("")
+                continue
+
+            d_ok, d_err = _transcribe(title, source, out_path)
+            ok += d_ok
+            error += d_err
+            log("")
 
         log("")
 

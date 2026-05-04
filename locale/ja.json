@@ -54,6 +54,8 @@
   "log_rss_loading": "RSS 読み込み中: {url}",
   "log_rss_found": "{count} 件見つかりました",
 
+  "log_phase_download": "── フェーズ1: ダウンロード ──",
+  "log_phase_transcribe": "── フェーズ2: 文字起こし ──",
   "log_start": "処理開始  全 {total} 件 | モデル: {model}",
   "log_output": "出力先: {dir}",
   "log_prompt": "initial_prompt: {prompt}",
